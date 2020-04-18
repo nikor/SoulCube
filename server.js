@@ -36,8 +36,21 @@ var inputState = [];
 
 function updateState() {
     inputState.forEach((e, i) => {
-        state.players[i].x += e[0] * 0.005;
-        state.players[i].y += e[1] * 0.005;
+        var p = state.players[i];
+        p.x += e[0] * 0.005;
+        p.y += e[1] * 0.005;
+        if (p.x < -1.0) {
+            p.x = -1.0;
+        }
+        if (p.x > 1.0) {
+            p.x = 1.0;
+        }
+        if (p.y < -1.0) {
+            p.y = -1.0;
+        }
+        if (p.y > 1.0) {
+            p.y = 1.0;
+        }
     });
 }
 setInterval(updateState, 10);
@@ -54,18 +67,19 @@ sendState();
 wss.on('connection', function connection(ws) {
     var me = nPlayers;
     nPlayers += 1;
-    state.players.push({x: 0.0, y: 0.0});
+    state.players.push({x: 0.0, y: 0.0, a: 0.0});
     inputState.push([0,0]);
     clients.push(ws);
     ws.on('message', function incoming(message) {
         if (message) {
-            var o = message.match(/(-?[10]),(-?[10])/);
+            var o = message.match(/(-?[10]),(-?[10]),(-?[\d]+\.[\d]+)/);
             if (o) {
                 inputState[me] = [o[1],o[2]];
+                state.players[me].a = o[3];
             }
         }
-        //console.log('received: %s', message);
     });
+    ws.send(JSON.stringify({id: me}));
 });
 
 server.listen(8080);
