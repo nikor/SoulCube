@@ -19,18 +19,52 @@ void main() {
 uniform vec2 uSize;
 uniform vec2 uScalingFactor;
 uniform vec2 uTest[10];
+uniform int uNPlayers;
+
+bool testPlayer(vec2 pix, vec2 obj) {
+    vec2 s = pix - obj;
+    s = s*s;
+    return s.x + s.y < 0.001;
+}
+vec4 drawPlayer(vec4 color, vec2 pix, vec2 obj) {
+    vec2 s = pix - obj;
+    s = s*s;
+    float r = s.x + s.y;
+    if (r < 0.001) {
+        return vec4(0.7, 0, 0.5, 1.0);
+    } else {
+        return color;
+    }
+}
 
 void main() {
+    vec2 pix = vec2(
+        gl_FragCoord.x/uSize.x - 0.5,
+        gl_FragCoord.y/uSize.y - 0.5
+    ) / uScalingFactor;
+
+    vec4 color = vec4(0.2, 0.7, 0.2, 1.0);
+
+    for (int i = 0; i < 10; i+= 1) {
+        if (i >= uNPlayers)
+            break;
+        color = drawPlayer(color, pix, uTest[i]);
+    }
+    gl_FragColor = color;
+
+    /*
     vec2 nSize = vec2(
         gl_FragCoord.x/uSize.x - 0.5 + uTest[0].x,
         gl_FragCoord.y/uSize.y - 0.5 + uTest[0].y
     ) / uScalingFactor;
+
     float s = nSize.x * nSize.x + nSize.y * nSize.y;
     if (s < 0.001) {
         gl_FragColor = vec4(1.0 - s/0.001, 0.0, 0.0, 1.0);
     } else {
         gl_FragColor = vec4(0.7, 1.0, 0.5, 1.0);
     }
+    */
 }
 </script>
 
@@ -40,9 +74,7 @@ let inputState = ['A','S','D','W'].reduce((acc, x) => {
     return acc;
 }, {});
 
-let state = {
-    playerPos: [0.0, 0.0]
-};
+let state = { players: [] };
 
 let gl = null;
 let glCanvas = null;
@@ -145,26 +177,63 @@ function startup() {
 }
 
 var moveArray = [[1,0], [0,1], [-1,0], [0,-1]];
-var keys = ['A','S','D','W'].map(x => 'Key' + x)
+var keys = ['A','S','D','W'].map(x => 'Key' + x);
+
+var oldMove = [0,0];
+function sendMove() {
+    var x = 0;
+    var y = 0;
+    if (inputState['KeyA'] && !inputState['KeyD']) {
+        x = -1;
+    } else if (!inputState['KeyA'] && inputState['KeyD']) {
+        x = 1;
+    }
+    if (inputState['KeyW'] && !inputState['KeyS']) {
+        y = 1;
+    } else if (!inputState['KeyW'] && inputState['KeyS']) {
+        y = -1;
+    }
+    var move = [x,y];
+    if (ws) {
+        if (oldMove[0] != move[0] || oldMove[1] != move[1]) {
+            ws.send(JSON.stringify(move));
+            oldMove = move;
+        }
+    }
+}
+
 function animateScene() {
+    sendMove();
+    /*
     keys.forEach((k,i) => {
         if (inputState[k]) {
             state.playerPos[0] += moveArray[i][0] * 0.01;
             state.playerPos[1] += moveArray[i][1] * 0.01;
         }
     });
+    */
     gl.viewport(0, 0, glCanvas.width, glCanvas.height);
 
     gl.useProgram(shaderProgram);
     uScalingFactor  = gl.getUniformLocation(shaderProgram, "uScalingFactor");
     uSize           = gl.getUniformLocation(shaderProgram, "uSize");
     uTest           = gl.getUniformLocation(shaderProgram, "uTest");
+    let uNPlayers   = gl.getUniformLocation(shaderProgram, "uNPlayers");
 
     gl.uniform2fv(uScalingFactor, currentScale);
     gl.uniform2fv(uSize, size);
-    let data = [ 0.1, 0.1, 0.2, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+    let nplayers = state.players.length;
+    gl.uniform1i(uNPlayers, nplayers)
+
+    let data = Array(20).fill(0.0);
+    state.players.forEach((p, i) => {
+        data[2 * i]     = p.x;
+        data[2 * i + 1] = p.y;
+    });
+    /*
     data[0] = state.playerPos[0];
     data[1] = state.playerPos[1];
+    */
     gl.uniform2fv(uTest, data);
 
     gl.drawArrays(gl.TRIANGLES, 0, vertexCount);
@@ -194,22 +263,35 @@ function keyBoardStarup() {
     var keys = ['A','S','D','W'].map(x => 'Key' + x)
     document.addEventListener('keydown', (e) => {
         if (-1 != keys.indexOf(e.code)) {
-            console.log('down', e.code);
             inputState[e.code] = true;
         }
     });
     document.addEventListener('keyup', (e) => {
         if (-1 != keys.indexOf(e.code)) {
             inputState[e.code] = false;
-            console.log('up', e.code);
         }
     });
+}
+
+var ws = null;
+function wsStarup() {
+    var mws = new WebSocket("ws://" + window.location.host + "/ws");
+    mws.onopen = function (e) {
+        ws = mws;
+        //console.log('open', e)
+        //ws.send('yo!');
+    }
+    mws.onmessage = function (e) {
+        state = JSON.parse(e.data);
+        //console.log(e.data);
+    }
 }
 
 function myStartup() {
     startup();
     mouseStartup();
     keyBoardStarup();
+    wsStarup();
 }
 
 window.addEventListener("load", myStartup, false);
