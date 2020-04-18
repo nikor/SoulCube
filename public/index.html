@@ -19,7 +19,9 @@ void main() {
 uniform vec2 uSize;
 uniform vec2 uScalingFactor;
 uniform vec3 uPlayers[10];
+uniform vec3 uBullets[100];
 uniform int uNPlayers;
+uniform int uNBullets;
 uniform vec2 uMe;
 
 vec4 drawBackground(vec2 pix) {
@@ -29,6 +31,26 @@ vec4 drawBackground(vec2 pix) {
         smoothstep(0.99,1.0, cos(pix.x * 40.0)) +
         smoothstep(0.99,1.0, cos(pix.y * 40.0))
     );
+}
+
+vec4 drawBullet(vec4 color, vec2 pix, vec3 obj) {
+    float a = obj.z + atan(0.0,-1.0)/2.0;
+    vec2 s = pix - obj.xy;
+    vec2 t = s * s;
+    float r = t.x + t.y;
+    s = vec2(
+        cos(a) * s.x - sin(a) * s.y,
+        sin(a) * s.x + cos(a) * s.y
+    );
+    s.y += 0.005;
+
+    if (r < 0.00001) {
+        return vec4(0.0, 0.0, 0.0, 1.0);
+    } else if (s.x * s.x < 0.00001 && s.y * s.y < 0.00001) {
+        return vec4(0.0, 0.0, 0.0, 1.0);
+    } else {
+        return color;
+    }
 }
 
 vec4 drawPlayer(vec4 color, vec2 pix, vec3 obj) {
@@ -61,6 +83,11 @@ void main() {
             break;
         color = drawPlayer(color, pix, uPlayers[i]);
     }
+    for (int i = 0; i < 100; i+= 1) {
+        if (i >= uNBullets)
+            break;
+        color = drawBullet(color, pix, uBullets[i]);
+    }
     gl_FragColor = color;
 }
 </script>
@@ -70,9 +97,13 @@ let inputState = ['A','S','D','W'].reduce((acc, x) => {
     acc['Key' + x] = false;
     return acc;
 }, {});
+let inputClick = 0;
 let inputAngle = 0;
 
-let state = { players: [] };
+let state = {
+    players: [],
+    bullets: []
+};
 let me = 0;
 
 let gl = null;
@@ -191,7 +222,7 @@ function sendMove() {
         } else if (!inputState['KeyW'] && inputState['KeyS']) {
             y = -1;
         }
-        var myin = [x,y,inputAngle];
+        var myin = [x,y,inputAngle,inputClick];
         ws.send(JSON.stringify(myin));
     }
 }
@@ -201,33 +232,56 @@ function animateScene() {
 
     gl.viewport(0, 0, glCanvas.width, glCanvas.height);
     gl.useProgram(shaderProgram);
+
+    //size
     uScalingFactor  = gl.getUniformLocation(shaderProgram, "uScalingFactor");
     uSize           = gl.getUniformLocation(shaderProgram, "uSize");
-    uPlayers        = gl.getUniformLocation(shaderProgram, "uPlayers");
-    let uNPlayers   = gl.getUniformLocation(shaderProgram, "uNPlayers");
-    let uMe         = gl.getUniformLocation(shaderProgram, "uMe");
-
     gl.uniform2fv(uScalingFactor, currentScale);
     gl.uniform2fv(uSize, size);
+
+
+    //players
+    let uNPlayers = gl.getUniformLocation(shaderProgram, "uNPlayers");
     let nplayers = state.players.length;
     gl.uniform1i(uNPlayers, nplayers)
+
+    uPlayers = gl.getUniformLocation(shaderProgram, "uPlayers");
+    let myPlayers = Array(30).fill(0.0);
+    state.players.forEach((p, i) => {
+        myPlayers[3 * i]     = p.x;
+        myPlayers[3 * i + 1] = p.y;
+        myPlayers[3 * i + 2] = p.a;
+    });
+    gl.uniform3fv(uPlayers, myPlayers);
+
+    //bullets
+    let uNBullets = gl.getUniformLocation(shaderProgram, "uNBullets");
+    let nbullets = state.bullets.length;
+    gl.uniform1i(uNBullets, nbullets)
+
+    uBullets = gl.getUniformLocation(shaderProgram, "uBullets");
+    let myBullets = Array(300).fill(0.0);
+    state.bullets.forEach((b, i) => {
+        myBullets[3 * i]     = b.x;
+        myBullets[3 * i + 1] = b.y;
+        myBullets[3 * i + 2] = b.a;
+    });
+    /*
+    myBullets[0] = 0.1;
+    myBullets[1] = 0.1;
+    myBullets[2] = 1;
+    */
+    gl.uniform3fv(uBullets, myBullets);
+
+    //me
+    let uMe         = gl.getUniformLocation(shaderProgram, "uMe");
     let meme = [0.0,0.0];
     if (state.players[me]) {
-        meme = [
-            state.players[me].x,
-            state.players[me].y
-        ];
+        meme = [ state.players[me].x, state.players[me].y ];
     }
     gl.uniform2fv(uMe, meme)
 
-    let data = Array(30).fill(0.0);
-    state.players.forEach((p, i) => {
-        data[3 * i]     = p.x;
-        data[3 * i + 1] = p.y;
-        data[3 * i + 2] = p.a;
-    });
-    gl.uniform3fv(uPlayers, data);
-
+    //draw
     gl.drawArrays(gl.TRIANGLES, 0, vertexCount);
 
     window.requestAnimationFrame(function(currentTime) {
@@ -243,12 +297,19 @@ function getMousePos(canvas, evt) {
         y: (evt.clientY - rect.top) - canvas.height/2
     };
 }
+
 function mouseStartup() {
     glCanvas.addEventListener('mousemove', function(evt) {
         var mousePos = getMousePos(glCanvas, evt);
         var message = 'Mouse position: ' + mousePos.x + ',' + mousePos.y;
         //console.log(message);
         inputAngle = Math.atan2(mousePos.y, mousePos.x);
+    }, false);
+    glCanvas.addEventListener('mousedown', function(evt) {
+        inputClick = 1;
+    }, false);
+    glCanvas.addEventListener('mouseup', function(evt) {
+        inputClick = 0;
     }, false);
 }
 
