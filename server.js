@@ -79,7 +79,7 @@ function updateState() {
     let now = new Date();
     var bspeed = 0.007;
     inputStateClick.forEach((e, i) => {
-        if (e == 1 && now - lastShot[i] > 200) {
+        if (e == 1 && now - lastShot[i] > 200 && !state.players[i].carry) {
             var b = Object.assign({}, state.players[i]);
             var a = b.a - (Math.PI * 3/2);
             b.x += bspeed * Math.sin(a);
@@ -111,12 +111,20 @@ function updateState() {
         state.bullets.forEach(b => {
             var x = b.x - p.x;
             var y = b.y - p.y;
-            if (x * x + y * y < 0.0001) {
+            var dbx = (b.x - p.bx);
+            var dby = (b.y - p.by);
+            var a = p.ba * -1;
+            var rx = dbx * Math.cos(a) - dby * Math.sin(a);
+            var ry = dbx * Math.sin(a) + dby * Math.cos(a);
+            if (
+                x * x + y * y < 0.0001 ||
+                (Math.abs(dbx) < 0.02 && Math.abs(dby) < 0.02)
+            ) {
                 p.x = (Math.random() - 0.5) * 2;
                 p.y = (Math.random() - 0.5) * 2;
-                p.bx = p.x + 0.1;
-                p.by = p.y + 0.1;
-                p.carry = false;
+                p.bx = p.x + boxDist;
+                p.by = p.y;
+                p.carry = true;
             }
         })
     });
@@ -159,10 +167,11 @@ wss.on('connection', function connection(ws) {
         x: x,
         y: y,
         a: 0.0,
-        bx: x + 0.1,
-        by: y + 0.1,
-        ba: (Math.random() -0.5) * 2 * Math.PI,
-        carry: false
+        bx: x + boxDist,
+        by: y,
+        //ba: (Math.random() -0.5) * 2 * Math.PI,
+        ba: 0,
+        carry: true
     });
 
     idToUuid.push(uuid);
