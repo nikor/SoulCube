@@ -13,6 +13,9 @@ const server = http.createServer(
         }).resume();
     }
 );
+function length(x, y) {
+    return Math.sqrt(x*x + y*y);
+};
 
 const wss = new WebSocket.Server({ noServer: true });
 
@@ -75,19 +78,44 @@ function updateState() {
         if (p.y > 1.0) {
             p.y = 1.0;
         }
+
         //move box
         if (p.carry) {
             var a = p.a - (Math.PI * 3/2);
             p.bx = p.x + boxDist * Math.sin(a);
             p.by = p.y + boxDist * Math.cos(a);
         }
+
+        //out of my tree
+        state.trees.forEach(t => {
+            var dx = p.x - t.x;
+            var dy = p.y - t.y;
+            var fp = 1.8;
+            if (length(dx, dy) < t.s * fp) {
+                var a = Math.PI/2 - Math.atan2(dy, dx);
+                p.x = t.x + t.s * fp * Math.sin(a);
+                p.y = t.y + t.s * fp * Math.cos(a);
+            }
+
+            var dx = p.bx - t.x;
+            var dy = p.by - t.y;
+            var fb = 1.8;
+            if (length(dx, dy) < t.s * fb) {
+                var a = Math.PI/2 - Math.atan2(dy, dx);
+                p.bx = t.x + t.s * fb * Math.sin(a);
+                p.by = t.y + t.s * fb * Math.cos(a);
+            }
+        });
+
     });
 
     //shot
     let now = new Date();
     var bspeed = 0.007;
     inputStateClick.forEach((e, i) => {
-        if (e == 1 && now - lastShot[i] > 200 && !state.players[i].carry) {
+        var p = state.players[i];
+        var shootspeed = (1 + length(p.x-p.bx, p.y-p.by)*5) * 100;
+        if (e == 1 && now - lastShot[i] > shootspeed && !state.players[i].carry) {
             var b = Object.assign({}, state.players[i]);
             var a = b.a - (Math.PI * 3/2);
             b.x += bspeed * Math.sin(a);
@@ -98,7 +126,7 @@ function updateState() {
     });
 
     //bullets
-    var del = [];
+    var bulletDel = [];
     state.bullets.forEach((e,i) => {
         var a = e.a - (Math.PI * 3/2);
         e.x += 0.007 * Math.sin(a);
@@ -107,16 +135,13 @@ function updateState() {
             e.x < -1.5 || e.x > 1.5 ||
             e.y < -1.5 || e.y > 1.5
         ) {
-            del.push(i);
+            bulletDel.push(i);
         }
-    });
-    del.forEach(e => {
-        state.bullets.splice(e,1);
     });
 
     //death
     state.players.forEach(p => {
-        state.bullets.forEach(b => {
+        state.bullets.forEach((b,i) => {
             var x = b.x - p.x;
             var y = b.y - p.y;
             var dbx = (b.x - p.bx);
@@ -128,6 +153,7 @@ function updateState() {
                 x * x + y * y < 0.0001 ||
                 (Math.abs(dbx) < 0.02 && Math.abs(dby) < 0.02)
             ) {
+                bulletDel.push(i);
                 p.x = (Math.random() - 0.5) * 2;
                 p.y = (Math.random() - 0.5) * 2;
                 p.bx = p.x + boxDist;
@@ -135,6 +161,20 @@ function updateState() {
                 p.carry = true;
             }
         })
+    });
+    //bullet on tree action
+    state.trees.forEach(t => {
+        state.bullets.forEach((b,i) => {
+            var x = b.x - t.x;
+            var y = b.y - t.y;
+            if (length(x, y) < t.s) {
+                bulletDel.push(i);
+            }
+        })
+    });
+
+    bulletDel.forEach(e => {
+        state.bullets.splice(e,1);
     });
 }
 
