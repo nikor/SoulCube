@@ -18,8 +18,9 @@ void main() {
 
 uniform vec2 uSize;
 uniform vec2 uScalingFactor;
-uniform vec3 uPlayers[10];
-uniform vec3 uBullets[100];
+uniform vec3 uPlayers[20];
+uniform vec3 uBullets[200];
+uniform vec3 uBoxes[20];
 uniform int uNPlayers;
 uniform int uNBullets;
 uniform vec2 uMe;
@@ -73,20 +74,82 @@ vec4 drawPlayer(vec4 color, vec2 pix, vec3 obj) {
     }
 }
 
+
+//Stolen from https://www.shadertoy.com/view/XsfGRn
+vec4 drawHeart(vec4 color, vec2 p) {
+    p.y -= 0.025;
+    p.x *= 10.0;
+    p.y *= 10.0;
+
+    float a = atan(p.x,p.y)/3.141593;
+    float r = length(p);
+    float h = abs(a);
+    float d = (13.0*h - 22.0*h*h + 10.0*h*h*h)/(6.0-5.0*h);
+
+    if (d-r > 0.01) {
+        return vec4(0.7, 0.0, 0.0, 1.0);
+    } else {
+        return color;
+    }
+}
+
+vec4 drawSquare(vec4 color, vec2 p, vec4 c) {
+    if (abs(p.x) < 0.1 && abs(p.y) < 0.1) {
+        return c;
+    } else {
+        return color;
+    }
+}
+
+vec4 drawBox(vec4 color, vec2 pix, vec3 obj) {
+    //float a = obj.z + atan(0.0,-1.0)/2.0;
+    float a = 1.0;
+    vec2 s = pix - obj.xy;
+    s.x *= 5.0;
+    s.y *= 5.0;
+
+    float x = s.x;
+    float y = s.y;
+    s = vec2(
+        cos(a) * x - sin(a) * y,
+        sin(a) * x + cos(a) * y
+    );
+
+    float lo = 0.08;
+    float gray = 0.5;
+    color = drawSquare(color, s, vec4(0.1, 0.1, 0.1, 1.0));
+    color = drawSquare(color, (s + vec2(lo)) * 2.0, vec4(gray, gray, gray, 1.0));
+    color = drawSquare(color, (s + vec2(-1.0 * lo)) * 2.0, vec4(gray, gray, gray, 1.0));
+    color = drawSquare(color, (s + vec2(-1.0 * lo, lo)) * 2.0, vec4(gray, gray, gray, 1.0));
+    color = drawSquare(color, (s + vec2(lo, -1.0 * lo)) * 2.0, vec4(gray, gray, gray, 1.0));
+
+
+    if (length(s) < 0.08) {
+        color = vec4(0.4, 0.4, 0.4, 1.0);
+    }
+    color = drawHeart(color, s);
+    return color;
+}
+
 void main() {
-    vec2 pix = (gl_FragCoord.xy/uSize.xy - vec2(0.5,0.5)) /uScalingFactor + uMe ;
+    vec2 pix = (gl_FragCoord.xy/uSize.xy - vec2(0.5,0.5)) /uScalingFactor + uMe;
 
     vec4 color = drawBackground(pix);
 
-    for (int i = 0; i < 10; i+= 1) {
+    for (int i = 0; i < 20; i+= 1) {
         if (i >= uNPlayers)
             break;
         color = drawPlayer(color, pix, uPlayers[i]);
     }
-    for (int i = 0; i < 100; i+= 1) {
+    for (int i = 0; i < 200; i+= 1) {
         if (i >= uNBullets)
             break;
         color = drawBullet(color, pix, uBullets[i]);
+    }
+    for (int i = 0; i < 20; i+= 1) {
+        if (i >= uNPlayers)
+            break;
+        color = drawBox(color, pix, uBoxes[i]);
     }
     gl_FragColor = color;
 }
@@ -254,6 +317,16 @@ function animateScene() {
     });
     gl.uniform3fv(uPlayers, myPlayers);
 
+    //boxes
+    uBoxes = gl.getUniformLocation(shaderProgram, "uBoxes");
+    let myBoxes = Array(30).fill(0.0);
+    state.players.forEach((p, i) => {
+        myBoxes[3 * i]     = p.bx;
+        myBoxes[3 * i + 1] = p.by;
+        myBoxes[3 * i + 2] = p.ba;
+    });
+    gl.uniform3fv(uBoxes, myBoxes);
+
     //bullets
     let uNBullets = gl.getUniformLocation(shaderProgram, "uNBullets");
     let nbullets = state.bullets.length;
@@ -266,11 +339,6 @@ function animateScene() {
         myBullets[3 * i + 1] = b.y;
         myBullets[3 * i + 2] = b.a;
     });
-    /*
-    myBullets[0] = 0.1;
-    myBullets[1] = 0.1;
-    myBullets[2] = 1;
-    */
     gl.uniform3fv(uBullets, myBullets);
 
     //me
@@ -342,6 +410,9 @@ function wsStarup() {
         } else {
             me = s.id;
         }
+    }
+    mws.onclose = function (e) {
+        setTimeout(wsStarup, 1000);
     }
 }
 
