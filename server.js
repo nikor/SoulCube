@@ -35,7 +35,10 @@ var state = {
 };
 var inputState = [];
 var inputStateClick = [];
+var inputInteract = [];
 var lastShot = [];
+
+const boxDist = 0.05;
 
 function updateState() {
     //move
@@ -63,6 +66,12 @@ function updateState() {
         }
         if (p.y > 1.0) {
             p.y = 1.0;
+        }
+        //move box
+        if (p.carry) {
+            var a = p.a - (Math.PI * 3/2);
+            p.bx = p.x + boxDist * Math.sin(a);
+            p.by = p.y + boxDist * Math.cos(a);
         }
     });
 
@@ -107,6 +116,7 @@ function updateState() {
                 p.y = (Math.random() - 0.5) * 2;
                 p.bx = p.x + 0.1;
                 p.by = p.y + 0.1;
+                p.carry = false;
             }
         })
     });
@@ -151,23 +161,50 @@ wss.on('connection', function connection(ws) {
         a: 0.0,
         bx: x + 0.1,
         by: y + 0.1,
-        ba: 0.0
+        ba: (Math.random() -0.5) * 2 * Math.PI,
+        carry: false
     });
 
     idToUuid.push(uuid);
     inputState.push([0,0]);
     inputStateClick.push(0);
+    inputInteract.push(0);
     lastShot.push(0);
     clients.push(ws);
 
     ws.on('message', function incoming(message) {
         var me = uuidToId[uuid].id;
         if (message) {
-            var o = message.match(/(-?[10]),(-?[10]),(-?[\d]+\.[\d]+),([01])/);
+            var o = message.match(/(-?[10]),(-?[10]),(-?[\d]+\.[\d]+),([01]),([01])/);
             if (o) {
                 inputState[me] = [o[1],o[2]];
-                state.players[me].a = o[3];
                 inputStateClick[me] = o[4];
+
+                //player and box angle
+                var p = state.players[me];
+                var da = o[3] - p.a;
+                p.a = o[3];
+                if (p.carry) {
+                    p.ba += da;
+                }
+
+                //pick up?
+                if (o[5] == 1 && inputInteract[me] == 0) {
+                    if (p.carry) {
+                        p.carry = false;
+                    } else {
+                        var a = p.a - (Math.PI * 3/2);
+                        var ebx = p.x + boxDist * Math.sin(a);
+                        var eby = p.y + boxDist * Math.cos(a);
+                        var dx = ebx - p.bx;
+                        var dy = eby - p.by;
+                        var dist2 = dx * dx + dy * dy;
+                        if (dist2 < 0.001) {
+                            p.carry = true;
+                        }
+                    }
+                }
+                inputInteract[me] = o[5];
             }
         }
     });
@@ -176,6 +213,7 @@ wss.on('connection', function connection(ws) {
         var luuid   = idToUuid.pop();
         var linput  = inputState.pop();
         var lclick  = inputStateClick.pop();
+        var linter  = inputInteract.pop();
         var lshot   = lastShot.pop();
         var lclient = clients.pop();
         nPlayers -= 1;
@@ -187,8 +225,9 @@ wss.on('connection', function connection(ws) {
             idToUuid[me]        = luuid;
             inputState[me]      = linput;
             inputStateClick[me] = lclick;
+            inputInteract[me]   = linter;
             lastShot[me]        = lshot;
-            clients[me]         = lclick;
+            clients[me]         = lclient;
 
             uuidToId[luuid].id  = me;
             uuidToId[luuid].ws.send(JSON.stringify({id: uuidToId[luuid].id}));

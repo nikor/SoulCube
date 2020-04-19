@@ -102,8 +102,8 @@ vec4 drawSquare(vec4 color, vec2 p, vec4 c) {
 }
 
 vec4 drawBox(vec4 color, vec2 pix, vec3 obj) {
-    //float a = obj.z + atan(0.0,-1.0)/2.0;
-    float a = 1.0;
+    float a = obj.z + atan(0.0,-1.0)/2.0;
+    //float a = 1.0;
     vec2 s = pix - obj.xy;
     s.x *= 5.0;
     s.y *= 5.0;
@@ -156,8 +156,9 @@ void main() {
 </script>
 
 <script>
-let inputState = ['A','S','D','W'].reduce((acc, x) => {
-    acc['Key' + x] = false;
+var keys = ['KeyA','KeyS','KeyD','KeyW', 'Space'];
+let inputState = keys.reduce((acc, x) => {
+    acc[x] = false;
     return acc;
 }, {});
 let inputClick = 0;
@@ -269,7 +270,6 @@ function startup() {
 }
 
 var moveArray = [[1,0], [0,1], [-1,0], [0,-1]];
-var keys = ['A','S','D','W'].map(x => 'Key' + x);
 
 function sendMove() {
     if (ws) {
@@ -285,7 +285,7 @@ function sendMove() {
         } else if (!inputState['KeyW'] && inputState['KeyS']) {
             y = -1;
         }
-        var myin = [x,y,inputAngle,inputClick];
+        var myin = [x,y,inputAngle,inputClick,inputState['Space'] ? 1 : 0];
         ws.send(JSON.stringify(myin));
     }
 }
@@ -382,7 +382,6 @@ function mouseStartup() {
 }
 
 function keyBoardStarup() {
-    var keys = ['A','S','D','W'].map(x => 'Key' + x)
     document.addEventListener('keydown', (e) => {
         if (-1 != keys.indexOf(e.code)) {
             inputState[e.code] = true;
