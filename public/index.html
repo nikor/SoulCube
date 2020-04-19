@@ -21,8 +21,10 @@ uniform vec2 uScalingFactor;
 uniform vec3 uPlayers[20];
 uniform vec3 uBullets[200];
 uniform vec3 uBoxes[20];
+uniform vec3 uTrees[50];
 uniform int uNPlayers;
 uniform int uNBullets;
+uniform int uNTrees;
 uniform vec2 uMe;
 
 vec4 drawBackground(vec2 pix) {
@@ -32,6 +34,17 @@ vec4 drawBackground(vec2 pix) {
         smoothstep(0.99,1.0, cos(pix.x * 40.0)) +
         smoothstep(0.99,1.0, cos(pix.y * 40.0))
     );
+}
+
+vec4 drawTree(vec4 color, vec2 pix, vec3 obj) {
+    vec2 mid = pix-obj.xy;
+    if ( length(mid) < obj.z * (1.0 + cos(atan(mid.x,mid.y) * 13.0)/40.0)) {
+        color = vec4(0.5,0.25,0.1,1.0);
+    }
+    if ( length(mid) < obj.z * 5.0  * (1.0 + cos(atan(mid.x,mid.y) * 13.0)/40.0)) {
+        return mix(color, vec4(0.0,0.45,0.0,1.0), 0.7);
+    }
+    return color;
 }
 
 vec4 drawBullet(vec4 color, vec2 pix, vec3 obj) {
@@ -151,6 +164,11 @@ void main() {
             break;
         color = drawBox(color, pix, uBoxes[i]);
     }
+    for (int i = 0; i < 20; i+= 1) {
+        if (i >= uNTrees)
+            break;
+        color = drawTree(color, pix, uTrees[i]);
+    }
     gl_FragColor = color;
 }
 </script>
@@ -166,7 +184,8 @@ let inputAngle = 0;
 
 let state = {
     players: [],
-    bullets: []
+    bullets: [],
+    trees: []
 };
 let me = 0;
 
@@ -326,6 +345,20 @@ function animateScene() {
         myBoxes[3 * i + 2] = p.ba;
     });
     gl.uniform3fv(uBoxes, myBoxes);
+
+    //trees
+    let uNTrees = gl.getUniformLocation(shaderProgram, "uNTrees");
+    let ntrees = state.trees.length;
+    gl.uniform1i(uNTrees, ntrees)
+
+    uTrees = gl.getUniformLocation(shaderProgram, "uTrees");
+    let myTrees = Array(150).fill(0.0);
+    state.trees.forEach((t, i) => {
+        myTrees[3 * i]     = t.x;
+        myTrees[3 * i + 1] = t.y;
+        myTrees[3 * i + 2] = t.s;
+    });
+    gl.uniform3fv(uTrees, myTrees);
 
     //bullets
     let uNBullets = gl.getUniformLocation(shaderProgram, "uNBullets");

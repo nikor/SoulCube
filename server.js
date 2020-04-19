@@ -32,7 +32,15 @@ var nPlayers = 0;
 var state = {
     players: [],
     bullets: [],
+    trees: []
 };
+for (var i = 0; i < 20; i += 1) {
+    state.trees.push( {
+        x: (Math.random() - 0.5) * 2,
+        y: (Math.random() - 0.5) * 2,
+        s: 0.01 + Math.random() * 0.03
+    });
+}
 var inputState = [];
 var inputStateClick = [];
 var inputInteract = [];
